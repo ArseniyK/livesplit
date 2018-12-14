@@ -33,8 +33,8 @@ local function check_race_end()
     if race_end == 1 then
 	local minutes = memory.readbyte(0x09A4)
 	local seconds = memory.readbyte(0x09A5)
-	local ms = memory.readbyte(0x09A1)
-	table.insert(timers, string.format("%02X:%02X:%02d", minutes,seconds,ms))
+	local ms = (memory.readbyte(0x09A1) * 16) / 100
+	table.insert(timers, string.format("%02X:%02X.%d", minutes,seconds,ms))
 		
         pipe_handle:write("split\r\n")
         pipe_handle:write("pause\r\n")
