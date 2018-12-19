@@ -3,9 +3,19 @@
 -- Arseniy Krasnov, 2018 
 -- Requires LiveSplit 1.7+  BizHawk-1.13.2
 
+TIME_BASE = 0x74E0
+RACE_END = 0x0988
+PLACE = 0x05FE
+SCORE_SCREEN_BASE = 0x0004
+MAX_INT_16 = 0xFFFF
+START_BASE = 0x095D
+
+
 last_race_end = 0
 started = false
 timers = {}
+last_is_score_screen = false
+can_save_time = false
 
 local function init_livesplit()
 	pipe_handle = io.open('//./pipe/LiveSplit', 'a+')
@@ -22,7 +32,7 @@ end
 
 
 local function check_race_end()
-    local race_end = memory.read_s16_be(0x0988)
+    local race_end = memory.read_s16_be(RACE_END)
 	
     if last_race_end == race_end then
         return
@@ -31,11 +41,7 @@ local function check_race_end()
     last_race_end = race_end
 	
     if race_end == 1 then
-	local minutes = memory.readbyte(0x09A4)
-	local seconds = memory.readbyte(0x09A5)
-	local ms = (memory.readbyte(0x09A1) * 16) / 100
-	table.insert(timers, string.format("%02X:%02X.%d", minutes,seconds,ms))
-		
+		can_save_time = true
         pipe_handle:write("split\r\n")
         pipe_handle:write("pause\r\n")
         pipe_handle:flush()
@@ -47,8 +53,38 @@ local function check_race_end()
     end
 end
 
+function ms_to_string(timer)
+  local minutes = math.floor(timer/600)
+  local seconds = math.floor(math.fmod(timer, 600)/10)
+  local ms = math.floor(math.fmod(timer,10))
+  return string.format("%02d:%02d.%d",minutes,seconds,ms)
+end
+
+
+local function save_timer()
+	local place = memory.read_u16_be(PLACE)
+	local time_offset = 4*(place-1)
+	local timer = memory.read_u16_be(TIME_BASE+time_offset)
+	table.insert(timers, ms_to_string(timer))
+end
+
+local function check_score_screen()
+	local is_score_screen = memory.read_u16_be(SCORE_SCREEN_BASE) == MAX_INT_16 and can_save_time
+	
+	if last_is_score_screen == is_score_screen and not can_save_time then
+		return
+	end
+	
+	last_is_score_screen = is_score_screen
+	
+	if is_score_screen then
+		save_timer()
+		can_save_time = false
+	end
+end
+
 local function check_start()
-    local this_time = memory.read_u16_be(0x095D)
+    local this_time = memory.read_u16_be(START_BASE)
 	
     if this_time ~= 0 then
 		started = true
@@ -78,6 +114,7 @@ while true do
     end
 	
     check_race_end()
-    draw_timers()
+	check_score_screen()
+	draw_timers()
     emu.frameadvance()
 end
